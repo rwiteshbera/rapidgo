@@ -34,5 +34,5 @@ func main() {
 	})
 
 	// Start server
-	router.Listen()
+	router.ListenGracefully()
 }

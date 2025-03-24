@@ -1,7 +1,13 @@
 package rapidgo
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 // Route struct to store route information
@@ -182,4 +188,36 @@ func (e *Engine) Listen(port ...string) error {
 	// 	e.PrintRoutes(address)
 	// }
 	return http.ListenAndServe(address, e.Router)
+}
+
+func (e *Engine) ListenGracefully(port ...string) error {
+	address := ResolvePort(port)
+	srv := &http.Server{
+		Addr:    address,
+		Handler: e.Router,
+	}
+
+	// Start the server in a new goroutine.
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	// Set up channel on which to send signal notifications.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit // Block until a signal is received
+	log.Println("Shutdown Server ...")
+
+	// Create a deadline to wait for.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Attempt a graceful shutdown.
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server Shutdown: %s", err)
+	}
+	log.Println("Server exiting")
+	return nil
 }
